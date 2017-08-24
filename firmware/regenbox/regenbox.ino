@@ -8,6 +8,7 @@
 #define SENSOR_PIN_3             A2      // Identification de la pin de mesure de tension pile 3
 #define SENSOR_PIN_4             A3      // Identification de la pin de mesure de tension pile 4
 #define ONE_HOUR            3600000      // nombre de milli-secondes dans une heure
+#define ONE_SECOND             1000      // nombre de milli-secondes dans une seconde
 #define ONE_MINUTE            60000      // nombre de milli-secondes dans une minute
 #define TWENTY_FOUR_HOURS  86400000      // nombre de milli-secondes dans 24 heures
 #define NB_ANALOG_RD            204      // nombre de lecture de la tension
@@ -17,6 +18,7 @@
 #define DEAD_THRESHOLD          688      // Seuil de mort de la pile pour l'arret des cycles de charge/decharge
 //#define OFFICIAL_TEST
 #define COMPLETE_CHARGE_THRESHOLD 1650
+#define PRESENCE_THRESHOLD     1700      // Seuil de detection de la preesence d'une pile
 #define MULTIPLE_SENSORS
 #define VOLTAGE_HISTORY_NUM       5      // Nombre d'echantillons sauvegardés dans l'historique
 
@@ -44,6 +46,7 @@ boolean gTerminal_actif       = false; // True: arduino en connexion avec le PC,
 unsigned long gPreviousMillis = 0;
 unsigned long gVoltageHist[VOLTAGE_HISTORY_NUM];         // Historique des mesures de tensions
 unsigned long gHistIndex = 0;          // Index de l'historique
+bool battery_present[4];               // verification de la présence des piles
 
 //-----------------------------------------------------------------------------
 //--------- Mesure de la tension dans l'emplacement 1 
@@ -97,27 +100,38 @@ unsigned long computeAvgVoltage() {
 // Envoie de la tension sur le port serie
 //-----------------------------------------------------------------------------
 void reportVoltage() {
-  unsigned long voltage_mesure = getVoltage(SENSOR_PIN_1);
-  gVoltageHist[gHistIndex % VOLTAGE_HISTORY_NUM] = voltage_mesure;
-  gHistIndex++;
-#ifndef OFFICIAL_TEST
-  Serial.print("Tension pile emplacement 1 : ");
-#endif 
-  Serial.println(voltage_mesure);
-  Serial.print("Avg : ");
-  unsigned long avgV = computeAvgVoltage();
-  Serial.println(avgV);
+  unsigned long voltage_mesure = 0;
+  if (battery_present[0]) {
+    voltage_mesure = getVoltage(SENSOR_PIN_1);
+    gVoltageHist[gHistIndex % VOLTAGE_HISTORY_NUM] = voltage_mesure;
+    gHistIndex++;
+  #ifndef OFFICIAL_TEST
+    Serial.print("Avg : ");
+    unsigned long avgV = computeAvgVoltage();
+    Serial.println(avgV);
+    Serial.print("Tension pile emplacement 1 : ");
+  #endif 
+    Serial.println(voltage_mesure);
+  }
 #ifdef MULTIPLE_SENSORS
-  voltage_mesure = getVoltage(SENSOR_PIN_2);
-  Serial.print("Tension pile emplacement 2 : "); 
-  Serial.println(voltage_mesure);
-  //voltage_mesure = getVoltage(SENSOR_PIN_3);
-  //Serial.print("Tension pile emplacement 3 : "); 
-  //Serial.println(voltage_mesure);
-  //voltage_mesure = getVoltage(SENSOR_PIN_4);
-  //Serial.print("Tension pile emplacement 4 : "); 
-  //Serial.println(voltage_mesure);
-  //Serial.println("mV;");
+  if (battery_present[1]) {  
+    voltage_mesure = getVoltage(SENSOR_PIN_2);
+    Serial.print("Tension pile emplacement 2 : "); 
+    Serial.println(voltage_mesure);
+  }
+
+  if (battery_present[2]) {  
+    voltage_mesure = getVoltage(SENSOR_PIN_3);
+    Serial.print("Tension pile emplacement 3 : "); 
+    Serial.println(voltage_mesure);
+  }
+
+  if (battery_present[3]) {
+    voltage_mesure = getVoltage(SENSOR_PIN_4);
+    Serial.print("Tension pile emplacement 4 : "); 
+    Serial.println(voltage_mesure);
+    Serial.println("mV;");
+  }
 #endif // MULTIPLE_SENSOR
 }
 
@@ -272,29 +286,38 @@ void modeCharge() {
    gPreviousMillis = currentMillis;
    // TODO : Define the strategy to stop charge !
   }
-  unsigned long voltage = getVoltage(SENSOR_PIN_1);
-  if (voltage >= COMPLETE_CHARGE_THRESHOLD) {
-    Serial.println("Fin de la charge");
-    setRegenBoxMode(RBX_MODE_IDLE);
+  unsigned long voltage = 0;
+  if (battery_present[0]) {
+    voltage = getVoltage(SENSOR_PIN_1);
+    if (voltage >= COMPLETE_CHARGE_THRESHOLD) {
+      Serial.println("Fin de la charge");
+      setRegenBoxMode(RBX_MODE_IDLE);
+    }
   }
 #ifndef OFFICIAL_TEST
-  unsigned long voltage2 = getVoltage(SENSOR_PIN_2);
-  if (voltage2 >= COMPLETE_CHARGE_THRESHOLD) {
-    Serial.println("Fin de la charge");
-    setRegenBoxMode(RBX_MODE_IDLE);
+  if (battery_present[1]) {
+    unsigned long voltage2 = getVoltage(SENSOR_PIN_2);
+    if (voltage2 >= COMPLETE_CHARGE_THRESHOLD) {
+      Serial.println("Fin de la charge");
+      setRegenBoxMode(RBX_MODE_IDLE);
+    }
   }
 
-//  unsigned long voltage3 = getVoltage(SENSOR_PIN_3);
-//  if (voltage3 >= COMPLETE_CHARGE_THRESHOLD) {
-//    Serial.println("Fin de la charge");
-//    setRegenBoxMode(RBX_MODE_IDLE);
-//  }
-//
-//  unsigned long voltage4 = getVoltage(SENSOR_PIN_4);
-//  if (voltage4 >= COMPLETE_CHARGE_THRESHOLD) {
-//    Serial.println("Fin de la charge");
-//    setRegenBoxMode(RBX_MODE_IDLE);
-//  }
+  if (battery_present[2]) {
+    unsigned long voltage3 = getVoltage(SENSOR_PIN_3);
+    if (voltage3 >= COMPLETE_CHARGE_THRESHOLD) {
+      Serial.println("Fin de la charge");
+      setRegenBoxMode(RBX_MODE_IDLE);
+    }
+  }
+
+  if (battery_present[3]) {
+    unsigned long voltage4 = getVoltage(SENSOR_PIN_4);
+    if (voltage4 >= COMPLETE_CHARGE_THRESHOLD) {
+      Serial.println("Fin de la charge");
+      setRegenBoxMode(RBX_MODE_IDLE);
+    }
+  }
 #endif
 }
 
@@ -342,6 +365,27 @@ void readInput() {
   }
 }
 
+void checkOneBatteryPresent(byte sensor_id, byte index) {
+  unsigned long voltage_mesure = getVoltage(sensor_id);
+  Serial.println(voltage_mesure);
+  if (voltage_mesure < PRESENCE_THRESHOLD) {
+    battery_present[index] = true;
+  }
+  else {
+    battery_present[index] = false;
+  }
+}
+
+//-----------------------------------------------------------------------------
+// Verification des la presence dans piles dans les emplacements
+//-----------------------------------------------------------------------------
+void checkBatteryPresent() {
+  checkOneBatteryPresent(SENSOR_PIN_1, 0);
+  checkOneBatteryPresent(SENSOR_PIN_2, 1);
+  checkOneBatteryPresent(SENSOR_PIN_3, 2);
+  checkOneBatteryPresent(SENSOR_PIN_4, 3);
+}
+
 //-----------------------------------------------------------------------------
 //- Initialisation du sketch
 //-----------------------------------------------------------------------------
@@ -355,6 +399,15 @@ void setup() {
     digitalWrite(13, LOW);
 
     setRegenBoxStatus(RBX_STATUS_IDLE);
+    checkBatteryPresent();
+    Serial.print("SLOT_1: ");
+    Serial.println(battery_present[0]);
+    Serial.print("SLOT_2: ");
+    Serial.println(battery_present[1]);
+    Serial.print("SLOT_3: ");
+    Serial.println(battery_present[2]);
+    Serial.print("SLOT_4: ");
+    Serial.println(battery_present[3]);
 }
 
 //-----------------------------------------------------------------------------
