@@ -43,7 +43,7 @@ byte gHeure                   = 0;
 boolean gTerminal_actif       = false; // True: arduino en connexion avec le PC, FALSE: arduino non connecté avec le PC(exemple sur alim secteur)
 unsigned long gPreviousMillis = 0;
 unsigned long gVoltageHist[VOLTAGE_HISTORY_NUM];         // Historique des mesures de tensions
-unsigned long gHistIndex = 0;          // Index de l'historique
+unsigned long gHistCounter = 0;          // compteur du nombre de mesure de tensions
 
 //-----------------------------------------------------------------------------
 //--------- Mesure de la tension dans l'emplacement 1 
@@ -80,7 +80,7 @@ void initVoltageHist() {
       gVoltageHist[i] = CHARGE_THRESHOLD;
     }
   }
-  gHistIndex = 0;
+  gHistCounter = 0;
 }
 
 unsigned long computeAvgVoltage() {
@@ -98,8 +98,8 @@ unsigned long computeAvgVoltage() {
 //-----------------------------------------------------------------------------
 void reportVoltage() {
   unsigned long voltage_mesure = getVoltage(SENSOR_PIN_1);
-  gVoltageHist[gHistIndex % VOLTAGE_HISTORY_NUM] = voltage_mesure;
-  gHistIndex++;
+  gVoltageHist[gHistCounter % VOLTAGE_HISTORY_NUM] = voltage_mesure;
+  gHistCounter++;
 #ifndef OFFICIAL_TEST
   Serial.print("Tension pile emplacement 1 : ");
   Serial.print("Avg : ");
